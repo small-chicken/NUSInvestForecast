@@ -1,8 +1,6 @@
 # Data
 
-`raw/` and `processed/` are gitignored (data was provided directly to the applicant by
-NUS Investment Society, not confirmed redistributable) — this file documents what should
-be there so the pipeline is reproducible for anyone with access to the source files.
+`raw/` and `processed/` are gitignored (data was provided directly) - this file documents what should be there so the pipeline is reproducible for anyone with access to the source files.
 
 ## `raw/Delta1/`
 
@@ -10,7 +8,7 @@ As provided, untouched.
 
 - `CATALOGUE_Delta1_ETF.csv` — metadata for every ETF symbol (name, exchange, base/sub
   type, business summary, first quoted date). Use this to find candidate govt-bond-ETF
-  tickers (e.g. `subtype1`/`subtype2` filtering) rather than guessing symbols.
+  tickers (e.g. `subtype1`/`subtype2` filtering).
 - `CATALOGUE_Delta1_Futures.csv` — metadata for every futures symbol (name, currency,
   exchange, `Class`, tick size, point value, margin). Continuous contracts are prefixed
   `&`; a `_CCB` suffix means back-adjusted continuous contract. G10 FX and Gold futures
