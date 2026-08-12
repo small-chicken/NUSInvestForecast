@@ -1,0 +1,29 @@
+[project]
+name = "cta"
+version = "0.1.0"
+description = "NUS Investment Society QR recruitment (Q3): CTA/momentum/regime strategy research"
+readme = "README.md"
+authors = [
+    { name = "small-chicken", email = "leo.hammond@icloud.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.1",
+    "numpy>=2.4.6",
+    "pandas>=3.0.5",
+    "scipy>=1.17.1",
+    "statsmodels>=0.14.6",
+    "vectorbt>=1.1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.2",
+]

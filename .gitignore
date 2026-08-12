@@ -1,0 +1,16 @@
+# Environments
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Provided data (not confirmed redistributable)
+data/raw/
+data/processed/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
