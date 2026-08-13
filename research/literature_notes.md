@@ -141,11 +141,32 @@ whether the trend signal itself is doing anything.
 result; a handful of neighbours from Baltas's grid as a check that the choice isn't
 cherry-picked) rather than a single untested parameter pair.
 
-**Return construction, carried forward from the EDA notebook's open question**: use the
-**raw (non-`_CCB`) continuous contract series**, daily % returns, not the back-adjusted
-series - this matches MOP/Baltas's own convention (splice the most-liquid contract, take
-% returns on that) and avoids the non-positive-price issue found in `01_data_exploration.ipynb`
-without needing an ad hoc price-difference workaround. Roll-day noise (the one day the
-underlying contract switches) is a known, accepted simplification in this literature
-rather than something to eliminate - Baltas & Kosowski use the identical convention over a
-near-identical universe and era.
+**Return construction — CORRECTED. The original note here was wrong, and the error
+inverted the project's headline result.**
+
+This section previously said: *"use the raw (non-`_CCB`) continuous contract series, daily
+% returns... Roll-day noise is a known, accepted simplification in this literature - Baltas
+& Kosowski use the identical convention."* **Both claims were false**, and they contradicted
+what this very file says about MOP (lines ~25-30) and Baltas-Kosowski (lines ~85-90): those
+papers splice the **return** series precisely so that *"a % return is never taken across a
+roll-day price jump."* The code did the thing the notes correctly said the literature avoids.
+
+Why it mattered: a raw continuous contract splices consecutive delivery months, so on each
+roll date the price jumps by the calendar spread. `pct_change()` books that jump as
+tradeable P&L. It is not noise — it is systematically signed by contango/backwardation, so
+an always-long benchmark *harvests* it (~25% of the passive benchmark's entire 2005-2014
+P&L came from the 2.3% of days that are rolls) while a long/short trend book *pays* it.
+The tell: that construction implied a rolling long VIX futures position returned **+30.3%**
+over 2005-2014 (true: **-99.9%**) and long WTI **+26.5%** (true: **-58.3%**).
+
+**What we actually use**: `held_contract_returns` = back-adjusted price *difference*
+divided by the *raw* previous close (`src/cta/indicators.py`). This is MOP's held-contract
+convention. It also dissolves the dilemma that produced the original mistake — `_CCB`
+levels go negative for 14 of 94 markets, but that affects **levels**, not **differences**,
+and the raw close used as the denominator is never non-positive.
+
+Correcting this reversed the headline: diversified TSMOM goes from Sharpe 0.64 to **1.05**
+over 2005-2014 while the passive benchmark falls from 1.06 to **0.80** — and the corrected
+figure now agrees with what MOP report (Sharpe > 1). See
+`notebooks/02_strategy_research.ipynb`, where `naive_spliced_returns` reproduces the
+contaminated result side by side with the fix.
