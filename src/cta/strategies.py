@@ -1,5 +1,7 @@
 """Turns indicators into target positions/weights."""
 
+from collections.abc import Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -24,19 +26,41 @@ def _vol_scale(vol: pd.Series, target_vol: float, max_leverage: float) -> pd.Ser
     return (target_vol / vol).clip(upper=max_leverage)
 
 
+def blended_momentum_signal(returns: pd.Series, lookbacks: Sequence[int]) -> pd.Series:
+    """Equal-weighted average of `sign(trailing return)` across several lookbacks.
+
+    Hurst-Ooi-Pedersen's refinement over single-horizon MOP: average the 1-, 3- and
+    12-month signals rather than committing to one horizon. The blend takes values on a
+    grid between -1 and +1 (all horizons agreeing gives a full-size position; disagreement
+    scales it down), which is a soft form of conviction weighting.
+
+    Exposed as an option and TESTED, not adopted -- on this dataset the blend *reduced*
+    out-of-sample Sharpe (see notebooks/02_strategy_research.ipynb, Part 4). It lives here
+    so that negative result is reproducible rather than asserted.
+    """
+    signals = [momentum_signal(returns, lookback=lb) for lb in lookbacks]
+    return sum(signals) / len(signals)
+
+
 def tsmom_position(
     returns: pd.Series,
-    lookback: int = 252,
+    lookback: int | Sequence[int] = 252,
     vol_window: int = 60,
     target_vol: float = 0.40,
     max_leverage: float = DEFAULT_MAX_LEVERAGE,
 ) -> pd.Series:
     """Time-series momentum position: sign(trailing return) * target_vol / realized_vol.
 
+    `lookback` is a single horizon in trading days (252 = 12 months, the MOP default), or
+    a sequence of horizons to blend equally (see `blended_momentum_signal`).
+
     Shifted by one day so the position held on day t only uses information available
     through day t-1 (no look-ahead).
     """
-    signal = momentum_signal(returns, lookback=lookback)
+    if isinstance(lookback, int):
+        signal = momentum_signal(returns, lookback=lookback)
+    else:
+        signal = blended_momentum_signal(returns, lookback)
     vol = realized_vol(returns, window=vol_window)
     position = signal * _vol_scale(vol, target_vol, max_leverage)
     return position.shift(1)
