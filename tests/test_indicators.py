@@ -13,7 +13,12 @@ from cta.indicators import (
     naive_spliced_returns,
     realized_vol,
 )
-from cta.strategies import passive_long_position, trend_efficiency_scale, tsmom_position
+from cta.strategies import (
+    blended_momentum_signal,
+    passive_long_position,
+    trend_efficiency_scale,
+    tsmom_position,
+)
 
 
 def _price_series(n, daily_return, start=100.0):
@@ -204,3 +209,40 @@ def test_held_contract_returns_excludes_the_roll_gap():
     assert naive.loc[idx[1]] == pytest.approx(1.0 / 100.0)
     assert held.loc[idx[2]] == pytest.approx(0.0)  # roll day: no real move
     assert naive.loc[idx[2]] == pytest.approx(-11.0 / 101.0)  # ...booked as -10.9%
+
+
+# --------------------------------------------------------------------------------------
+# Multi-horizon momentum blend (tested, not adopted -- see notebooks/02, Part 4)
+# --------------------------------------------------------------------------------------
+
+
+def test_blended_signal_is_full_size_when_every_horizon_agrees():
+    steady_uptrend = pd.Series(
+        0.001, index=pd.bdate_range("2015-01-01", periods=400)
+    )
+    blended = blended_momentum_signal(steady_uptrend, [21, 63, 252])
+    assert blended.dropna().iloc[-1] == pytest.approx(1.0)
+
+
+def test_blended_signal_scales_down_when_horizons_disagree():
+    """A short rally inside a long downtrend: the 1-month signal turns positive while the
+    12-month one stays negative, so the blend must land strictly between -1 and +1."""
+    idx = pd.bdate_range("2015-01-01", periods=400)
+    path = np.concatenate([np.full(390, -0.003), np.full(10, 0.02)])
+    returns = pd.Series(path, index=idx)
+
+    blended = blended_momentum_signal(returns, [21, 252]).dropna()
+    assert -1.0 < blended.iloc[-1] < 1.0
+
+
+def test_tsmom_position_accepts_a_single_horizon_or_a_sequence():
+    rng = np.random.default_rng(0)
+    idx = pd.bdate_range("2015-01-01", periods=500)
+    returns = pd.Series(rng.normal(0.0004, 0.01, 500), index=idx)
+
+    single = tsmom_position(returns, lookback=252, vol_window=60)
+    blended = tsmom_position(returns, lookback=[21, 63, 252], vol_window=60)
+
+    assert not single.equals(blended)
+    # the blend can never demand a bigger position than full conviction at the same vol
+    assert blended.abs().max() <= single.abs().max() + 1e-12

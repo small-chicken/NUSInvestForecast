@@ -5,13 +5,19 @@ import pandas as pd
 import pytest
 
 from cta.backtest import (
+    EQUITY_SYMBOL,
+    blend,
+    correlation_ranked_universe,
     correlation_regime_scale,
     diversified_tsmom,
     instrument_returns,
+    portfolio_leverage,
     portfolio_mean,
+    reference_books,
+    universe_breadth_study,
 )
 from cta.data import curated_futures_universe
-from cta.metrics import growth_of_one, sharpe_ratio
+from cta.metrics import annualized_volatility, growth_of_one, sharpe_ratio
 
 # A handful of liquid, long-history instruments across classes -- enough for a
 # meaningfully non-degenerate correlation estimate without pulling in all 77.
@@ -183,3 +189,173 @@ def test_curated_universe_runs_end_to_end():
     result = diversified_tsmom(universe)
     assert len(result["strategy"]) > 0
     assert result["strategy"].abs().max() < 1.0  # sane daily returns, not blown up
+
+
+# --------------------------------------------------------------------------------------
+# Book-level volatility targeting
+# --------------------------------------------------------------------------------------
+
+
+def test_portfolio_leverage_de_levers_when_volatility_rises():
+    calm = pd.Series(0.001, index=pd.bdate_range("2020-01-01", periods=300))
+    rng = np.random.default_rng(0)
+    noisy = calm + pd.Series(rng.normal(0, 0.02, 300), index=calm.index)
+
+    steady = portfolio_leverage(calm + 1e-4 * rng.normal(0, 1, 300), target_vol=0.10, window=60)
+    turbulent = portfolio_leverage(noisy, target_vol=0.10, window=60)
+
+    assert turbulent.dropna().mean() < steady.dropna().mean()
+
+
+def test_portfolio_leverage_is_capped():
+    almost_flat = pd.Series(
+        1e-9, index=pd.bdate_range("2020-01-01", periods=300)
+    ) * np.arange(300)
+    leverage = portfolio_leverage(almost_flat, target_vol=0.10, window=60, max_leverage=3.0)
+    assert leverage.dropna().max() <= 3.0
+
+
+def test_portfolio_leverage_has_no_lookahead():
+    """Leverage applied on day t must be computable from returns through t-1, so truncating
+    the series after t cannot change it."""
+    rng = np.random.default_rng(1)
+    idx = pd.bdate_range("2020-01-01", periods=500)
+    returns = pd.Series(rng.normal(0.0003, 0.01, 500), index=idx)
+
+    full = portfolio_leverage(returns, target_vol=0.10, window=100)
+    check_date = idx[300]
+    truncated = portfolio_leverage(returns.loc[:check_date], target_vol=0.10, window=100)
+
+    assert full.loc[check_date] == pytest.approx(truncated.loc[check_date])
+
+
+def test_portfolio_vol_target_moves_realized_vol_toward_the_target():
+    plain = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=0.0)["strategy"]
+    targeted = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=0.0, portfolio_vol_target=0.10)[
+        "strategy"
+    ]
+    common = plain.index.intersection(targeted.index)
+
+    assert abs(annualized_volatility(targeted.loc[common]) - 0.10) < abs(
+        annualized_volatility(plain.loc[common]) - 0.10
+    )
+
+
+def test_portfolio_vol_target_charges_for_the_relevering_trades():
+    """REGRESSION: leverage is applied to POSITIONS, not to the finished return series.
+    Scaling returns would capture the P&L of de-levering into a crisis while treating the
+    trades that achieve it as free -- so the overlay would look better than it is."""
+    gross = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=0.0, portfolio_vol_target=0.10)
+    net = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=5.0, portfolio_vol_target=0.10)
+
+    positions = gross["strategy_positions"]
+    leverage = gross["strategy_leverage"]
+    # positions really are levered, and the extra turnover really is charged
+    assert leverage.dropna().std() > 0
+    assert positions.abs().sum(axis=1).corr(leverage.reindex(positions.index)) > 0.1
+    assert net["strategy"].mean() < gross["strategy"].mean()
+
+
+def test_portfolio_vol_target_applies_to_both_legs():
+    """The benchmark exists to hold risk constant while the signal varies. An overlay that
+    reshaped the risk of one leg only would break exactly that comparison."""
+    plain = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=0.0)
+    targeted = diversified_tsmom(_SAMPLE_UNIVERSE, cost_bps=0.0, portfolio_vol_target=0.10)
+
+    assert not plain["benchmark"].equals(targeted["benchmark"])
+    assert targeted["benchmark_leverage"] is not None
+    assert plain["strategy_leverage"] is None
+
+
+# --------------------------------------------------------------------------------------
+# REGRESSION: the "live instrument" span must not look forward (Fix 3)
+# --------------------------------------------------------------------------------------
+
+
+def test_portfolio_mean_does_not_use_future_data_to_decide_who_is_live():
+    """REGRESSION: the live span used to end at an instrument's LAST observation, found
+    with a reverse cumulative max -- i.e. "is there any print at or after today?", which
+    a backtester standing on that day cannot know. Truncating the panel must not change
+    any weight computed before the truncation point."""
+    idx = pd.bdate_range("2020-01-01", periods=60)
+    panel = pd.DataFrame(
+        {"survivor": 0.01, "delisted": [0.02] * 30 + [np.nan] * 30}, index=idx
+    )
+
+    full = portfolio_mean(panel)
+    truncated = portfolio_mean(panel.iloc[:20])
+    pd.testing.assert_series_equal(full.iloc[:20], truncated, check_freq=False)
+
+
+def test_portfolio_mean_drops_an_instrument_after_it_goes_quiet():
+    idx = pd.bdate_range("2020-01-01", periods=60)
+    panel = pd.DataFrame({"live": 0.01, "delisted": [0.03] * 10 + [np.nan] * 50}, index=idx)
+
+    result = portfolio_mean(panel, delist_after=5)
+    assert result.iloc[0] == pytest.approx(0.02)  # both live: (0.01 + 0.03) / 2
+    assert result.iloc[12] == pytest.approx(0.005)  # still counted, contributing 0
+    assert result.iloc[40] == pytest.approx(0.01)  # long gone, out of the divisor
+
+
+# --------------------------------------------------------------------------------------
+# Reference books and universe studies
+# --------------------------------------------------------------------------------------
+
+
+def test_reference_books_are_plain_unlevered_holdings():
+    books = reference_books()
+    equity = instrument_returns([EQUITY_SYMBOL])[EQUITY_SYMBOL]
+
+    pd.testing.assert_series_equal(books["Equity (S&P futures)"], equity, check_names=False)
+    # 60/40 must be less volatile than 100% equity, or it isn't a 60/40
+    common = books["60/40 equity/bonds"].index.intersection(equity.index)
+    assert books["60/40 equity/bonds"].loc[common].std() < equity.loc[common].std()
+
+
+def test_blend_interpolates_between_its_two_legs():
+    idx = pd.bdate_range("2020-01-01", periods=10)
+    core = pd.Series(0.01, index=idx)
+    sleeve = pd.Series(0.03, index=idx)
+
+    assert blend(core, sleeve, 0.0).iloc[0] == pytest.approx(0.01)
+    assert blend(core, sleeve, 1.0).iloc[0] == pytest.approx(0.03)
+    assert blend(core, sleeve, 0.25).iloc[0] == pytest.approx(0.015)
+
+
+def test_universe_breadth_study_reports_one_row_per_draw():
+    study = universe_breadth_study(
+        _SAMPLE_UNIVERSE, sizes=[2, 4], window=slice("2005-01-01", "2014-12-31"), n_draws=3
+    )
+    assert len(study) == 6
+    assert set(study["n_markets"]) == {2, 4}
+
+
+def test_universe_breadth_study_evaluates_the_full_universe_once():
+    """A "random draw" from the whole universe is just the universe, so drawing it
+    repeatedly would plot the same point N times and imply a spread that isn't there."""
+    study = universe_breadth_study(
+        _SAMPLE_UNIVERSE,
+        sizes=[len(_SAMPLE_UNIVERSE)],
+        window=slice("2005-01-01", "2014-12-31"),
+        n_draws=5,
+    )
+    assert len(study) == 1
+
+
+def test_correlation_ranked_universe_uses_only_data_before_the_cutoff():
+    """The whole point of ranking point-in-time: a selection made at end-2009 must not
+    move when 2010-2014 data is appended."""
+    returns = instrument_returns(_SAMPLE_UNIVERSE)
+    truncated = {s: r.loc[:"2009-12-31"] for s, r in returns.items()}
+
+    from_full = correlation_ranked_universe(_SAMPLE_UNIVERSE, 4, "2009-12-31", returns=returns)
+    from_truncated = correlation_ranked_universe(
+        _SAMPLE_UNIVERSE, 4, "2009-12-31", returns=truncated
+    )
+    assert from_full == from_truncated
+
+
+def test_correlation_ranked_universe_ends_pick_opposite_markets():
+    most = correlation_ranked_universe(_SAMPLE_UNIVERSE, 3, "2009-12-31", most_correlated=True)
+    least = correlation_ranked_universe(_SAMPLE_UNIVERSE, 3, "2009-12-31", most_correlated=False)
+    assert not set(most) & set(least)
