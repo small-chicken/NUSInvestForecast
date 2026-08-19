@@ -33,8 +33,8 @@ write-up states this explicitly rather than leading on the point estimate.
 
 ## Layout
 
-- `data/`: raw provided CSVs (`data/raw/`, gitignored) and cleaned/aligned output
-  (`data/processed/`, gitignored). See `data/README.md`.
+- `data/`: the raw provided CSVs (`data/raw/`, gitignored). See `data/README.md` for the
+  expected layout.
 - `src/cta/`: all real logic, imported (not copy-pasted) into notebooks:
   - `data.py`: load/clean/align, point-in-time universe screen
   - `indicators.py`: signal building blocks, incl. roll-safe futures returns
@@ -58,6 +58,11 @@ write-up states this explicitly rather than leading on the point estimate.
 ```bash
 uv sync
 ```
+
+The provided CSVs are not in the repository. Put them at `data/raw/Delta1/`, keeping the
+`Futures Data/` and `ETF Data/` subdirectories and the two `CATALOGUE_*.csv` files as
+supplied; `data/README.md` lists the expected layout. Nothing else is generated or cached,
+so that is the only input required.
 
 ## Running
 
