@@ -219,11 +219,11 @@ def multi_growth_chart(series: dict[str, pd.Series], title: str, ax=None):
     # right-hand headroom for the direct labels, taken only on the right -- symmetric
     # margins would open dead space before the first observation as well
     ax.set_xlim(left=start, right=max(e[2] for e in ends) + (max(e[2] for e in ends) - start) * 0.17)
-    _label_ends_without_overlap(ax, ends)
+    label_ends_without_overlap(ax, ends)
     return ax
 
 
-def _label_ends_without_overlap(ax, ends: list[tuple], min_gap_points: float = 12.0) -> None:
+def label_ends_without_overlap(ax, ends: list[tuple], min_gap_points: float = 12.0) -> None:
     """Direct-label each line's end, nudging labels apart where two lines finish together.
 
     Books that end at a similar level would otherwise print their labels on top of each

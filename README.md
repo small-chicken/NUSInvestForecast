@@ -1,4 +1,4 @@
-# NUS Investment Society QR Recruitment — Q3
+# NUS Investment Society QR Recruitment: Q3
 
 Trading strategy (momentum/trend-following CTA, dynamic regime allocation, or vol
 strategy) on G10 FX / Gold Continuous Futures / Govt Bond ETFs or Futures, with ≥5 years
@@ -13,7 +13,7 @@ inverse to its own volatility, the whole book held near 10% annualised risk.
 
 Headline, net of 2bp per unit of notional traded:
 
-| | Walk-forward OOS 2005–2014 | Held-out 2010–2014 |
+| | Walk-forward OOS 2005-2014 | Held-out 2010-2014 |
 |---|---|---|
 | Sharpe | **1.08** (t = 3.49) | **1.27** (t = 2.90) |
 | Bootstrap 95% CI | [0.42, 1.74] | [0.34, 2.27] |
@@ -33,25 +33,25 @@ write-up states this explicitly rather than leading on the point estimate.
 
 ## Layout
 
-- `data/` — raw provided CSVs (`data/raw/`, gitignored) and cleaned/aligned output
+- `data/`: raw provided CSVs (`data/raw/`, gitignored) and cleaned/aligned output
   (`data/processed/`, gitignored). See `data/README.md`.
-- `src/cta/` — all real logic, imported (not copy-pasted) into notebooks:
-  - `data.py` — load/clean/align, point-in-time universe screen
-  - `indicators.py` — signal building blocks, incl. roll-safe futures returns
-  - `strategies.py` — indicators → target positions
-  - `backtest.py` — portfolio assembly, walk-forward, vol targeting, universe studies
-  - `metrics.py` — Sharpe/max DD/turnover, plus block-bootstrap inference
-  - `plotting.py` — shared chart styling (validated palette, fixed series colours)
+- `src/cta/`: all real logic, imported (not copy-pasted) into notebooks:
+  - `data.py`: load/clean/align, point-in-time universe screen
+  - `indicators.py`: signal building blocks, incl. roll-safe futures returns
+  - `strategies.py`: indicators → target positions
+  - `backtest.py`: portfolio assembly, walk-forward, vol targeting, universe studies
+  - `metrics.py`: Sharpe/max DD/turnover, plus block-bootstrap inference
+  - `plotting.py`: shared chart styling (validated palette, fixed series colours)
 - `notebooks/`
-  - `01_data_exploration.ipynb` — EDA (scratch)
-  - `02_strategy_research.ipynb` — working log (scratch): signal prototyping, the
+  - `01_data_exploration.ipynb`: EDA (scratch)
+  - `02_strategy_research.ipynb`: working log (scratch): signal prototyping, the
     roll-gap bug and its fix, and Part 4's record of every variant tested and rejected
-  - `03_final_writeup.ipynb` — **the deliverable**: intro, methodology, findings,
-    takeaways. Thin — mostly calls into `src/cta/`.
-- `research/literature_notes.md` — paper summaries used as inspiration + benchmark
+  - `03_final_writeup.ipynb`: **the deliverable**. Intro, methodology, findings,
+    takeaways. Thin, mostly calls into `src/cta/`.
+- `research/literature_notes.md`: paper summaries used as inspiration + benchmark
   definitions.
-- `reports/figures/` — exported charts referenced from the final notebook.
-- `tests/` — lightweight sanity checks on `src/cta/`.
+- `reports/figures/`: exported charts referenced from the final notebook.
+- `tests/`: lightweight sanity checks on `src/cta/`.
 
 ## Setup
 
